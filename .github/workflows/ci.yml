@@ -13,12 +13,27 @@ jobs:
     name: Backend Tests
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gym_user
+          POSTGRES_PASSWORD: gym_password
+          POSTGRES_DB: gym_management
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U gym_user -d gym_management"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     defaults:
       run:
         working-directory: backend
 
     env:
-      DATABASE_URL: postgresql+psycopg2://test:test@localhost:5432/test
+      DATABASE_URL: postgresql+psycopg2://gym_user:gym_password@localhost:5432/gym_management
       JWT_SECRET_KEY: ci-test-secret-key
 
     steps:
@@ -35,5 +50,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Check Alembic migrations
+        run: |
+          alembic upgrade head
+
       - name: Run tests
-        run: pytest -v
+        run: |
+          pytest -v
