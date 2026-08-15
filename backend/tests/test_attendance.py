@@ -1,4 +1,5 @@
 from datetime import date
+import uuid
 
 from fastapi.testclient import TestClient
 
@@ -8,11 +9,36 @@ from app.main import app
 client = TestClient(app)
 
 
+def unique_member_code():
+    return f"ATT-TEST-{uuid.uuid4().hex[:8]}"
+
+
+def unique_phone():
+    return f"03{uuid.uuid4().int % 10_000_000_000:010d}"
+
+
+def create_test_member():
+    response = client.post(
+        "/api/v1/members",
+        json={
+            "member_code": unique_member_code(),
+            "full_name": "Attendance Test Member",
+            "phone": unique_phone(),
+        },
+    )
+
+    assert response.status_code == 201
+
+    return response.json()["id"]
+
+
 def test_create_attendance():
+    member_id = create_test_member()
+
     response = client.post(
         "/api/v1/attendance",
         json={
-            "member_id": 5,
+            "member_id": member_id,
             "check_in": "09:00:00",
             "status": "present",
         },
@@ -22,32 +48,41 @@ def test_create_attendance():
 
     data = response.json()
 
-    assert data["member_id"] == 5
+    assert data["member_id"] == member_id
     assert data["status"] == "present"
     assert data["check_in"] == "09:00:00"
 
 
 def test_get_attendance():
-    response = client.get(
-        "/api/v1/attendance"
-    )
+    response = client.get("/api/v1/attendance")
 
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
 
 def test_get_today_attendance():
-    response = client.get(
-        "/api/v1/attendance/today"
-    )
+    response = client.get("/api/v1/attendance/today")
 
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
 
 def test_get_member_attendance():
+    member_id = create_test_member()
+
+    create_response = client.post(
+        "/api/v1/attendance",
+        json={
+            "member_id": member_id,
+            "check_in": "09:00:00",
+            "status": "present",
+        },
+    )
+
+    assert create_response.status_code == 201
+
     response = client.get(
-        "/api/v1/attendance/member/5"
+        f"/api/v1/attendance/member/{member_id}"
     )
 
     assert response.status_code == 200
@@ -55,7 +90,7 @@ def test_get_member_attendance():
 
     data = response.json()
 
-    assert all(item["member_id"] == 5 for item in data)
+    assert all(item["member_id"] == member_id for item in data)
 
 
 def test_get_nonexistent_member_attendance():
@@ -67,10 +102,12 @@ def test_get_nonexistent_member_attendance():
 
 
 def test_duplicate_attendance():
+    member_id = create_test_member()
+
     response = client.post(
         "/api/v1/attendance",
         json={
-            "member_id": 6,
+            "member_id": member_id,
             "attendance_date": str(date.today()),
             "check_in": "10:00:00",
             "status": "present",
@@ -82,7 +119,7 @@ def test_duplicate_attendance():
     duplicate_response = client.post(
         "/api/v1/attendance",
         json={
-            "member_id": 6,
+            "member_id": member_id,
             "attendance_date": str(date.today()),
             "check_in": "10:30:00",
             "status": "present",
@@ -105,10 +142,12 @@ def test_create_attendance_invalid_member():
 
 
 def test_update_attendance():
+    member_id = create_test_member()
+
     response = client.post(
         "/api/v1/attendance",
         json={
-            "member_id": 7,
+            "member_id": member_id,
             "check_in": "08:30:00",
             "status": "present",
         },
