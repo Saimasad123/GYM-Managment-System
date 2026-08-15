@@ -1,8 +1,10 @@
 from fastapi import Depends, FastAPI
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-
+from app.api.v1.members import router as members_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.memberships import router as memberships_router
+from app.api.v1.payments import router as payments_router
 from app.api.v1.membership_packages import (
     router as membership_packages_router,
 )
@@ -20,12 +22,25 @@ app.include_router(
     auth_router,
     prefix="/api/v1",
 )
+app.include_router(
+    members_router,
+    prefix="/api/v1",
+)
 
 app.include_router(
     membership_packages_router,
     prefix="/api/v1",
 )
 
+app.include_router(
+    payments_router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    memberships_router,
+    prefix="/api/v1",
+)
 
 @app.get("/")
 def root():
