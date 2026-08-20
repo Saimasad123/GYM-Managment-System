@@ -242,7 +242,7 @@ alembic current
 ### 1. Clone the repository
 
 ```bash
-git clone <your-repository-url>
+git clone <https://github.com/Saimasad123/GYM-Managment-System>
 cd GYM/backend
 ```
 
