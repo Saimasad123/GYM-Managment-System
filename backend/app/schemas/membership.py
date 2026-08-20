@@ -28,3 +28,22 @@ class MembershipResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class MembershipStatusResponse(BaseModel):
+    id: int
+    member_id: int
+    member_name: str | None = None
+    member_code: str | None = None
+    package_name: str | None = None
+    duration_months: int | None = None
+    start_date: date
+    expiry_date: date
+    total_fee: Decimal
+    amount_paid: Decimal
+    balance: Decimal
+    payment_status: str
+    membership_status: str
+    days_remaining: int | None = None
+
+    model_config = ConfigDict(from_attributes=True)

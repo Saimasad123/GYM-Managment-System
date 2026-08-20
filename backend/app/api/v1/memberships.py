@@ -1,5 +1,5 @@
 from calendar import monthrange
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -9,9 +9,11 @@ from app.db.session import get_db
 from app.models.member import Member
 from app.models.membership import Membership
 from app.models.membership_package import MembershipPackage
+from app.schemas.dashboard import ExpiringMembershipSummary
 from app.schemas.membership import (
     MembershipCreate,
     MembershipResponse,
+    MembershipStatusResponse,
     MembershipUpdate,
 )
 
@@ -126,6 +128,155 @@ def get_active_memberships(
     ).all()
 
     return memberships
+
+
+@router.get(
+    "/expiring-soon",
+    response_model=list[ExpiringMembershipSummary],
+)
+def get_expiring_soon_memberships(
+    db: Session = Depends(get_db),
+):
+    today = date.today()
+    expiring_threshold = today + timedelta(days=7)
+
+    rows = db.execute(
+        select(
+            Membership.id,
+            Membership.member_id,
+            Membership.expiry_date,
+            Member.full_name,
+        )
+        .join(Member, Membership.member_id == Member.id)
+        .where(
+            Membership.expiry_date >= today,
+            Membership.expiry_date <= expiring_threshold,
+        )
+        .order_by(Membership.expiry_date)
+    ).all()
+
+    return [
+        ExpiringMembershipSummary(
+            id=row.id,
+            member_id=row.member_id,
+            member_name=row.full_name,
+            expiry_date=row.expiry_date,
+            end_date=row.expiry_date,
+        )
+        for row in rows
+    ]
+
+
+@router.get(
+    "/expired",
+    response_model=list[ExpiringMembershipSummary],
+)
+def get_expired_memberships(
+    db: Session = Depends(get_db),
+):
+    today = date.today()
+
+    rows = db.execute(
+        select(
+            Membership.id,
+            Membership.member_id,
+            Membership.expiry_date,
+            Member.full_name,
+        )
+        .join(Member, Membership.member_id == Member.id)
+        .where(
+            Membership.expiry_date < today,
+        )
+        .order_by(Membership.expiry_date)
+    ).all()
+
+    return [
+        ExpiringMembershipSummary(
+            id=row.id,
+            member_id=row.member_id,
+            member_name=row.full_name,
+            expiry_date=row.expiry_date,
+            end_date=row.expiry_date,
+        )
+        for row in rows
+    ]
+
+
+@router.get(
+    "/status",
+    response_model=list[MembershipStatusResponse],
+)
+def get_all_membership_status(
+    db: Session = Depends(get_db),
+):
+    today = date.today()
+
+    rows = db.execute(
+        select(
+            Membership.id,
+            Membership.member_id,
+            Membership.start_date,
+            Membership.expiry_date,
+            Membership.total_fee,
+            Membership.amount_paid,
+            Membership.status,
+            Member.full_name,
+            Member.member_code,
+            MembershipPackage.name,
+            MembershipPackage.duration_months,
+        )
+        .join(Member, Membership.member_id == Member.id)
+        .join(
+            MembershipPackage,
+            Membership.package_id == MembershipPackage.id,
+        )
+        .order_by(Membership.expiry_date)
+    ).all()
+
+    result = []
+
+    for row in rows:
+        balance = row.total_fee - row.amount_paid
+
+        if balance <= 0:
+            payment_status = "Paid"
+        elif row.amount_paid > 0:
+            payment_status = "Partial"
+        else:
+            payment_status = "Unpaid"
+
+        if row.expiry_date < today:
+            membership_status = "Expired"
+        elif row.expiry_date <= today + timedelta(days=7):
+            membership_status = "Expiring Soon"
+        else:
+            membership_status = "Active"
+
+        days_remaining = (row.expiry_date - today).days
+
+        result.append(
+            MembershipStatusResponse(
+                id=row.id,
+                member_id=row.member_id,
+                member_name=row.full_name,
+                member_code=row.member_code,
+                package_name=row.name,
+                duration_months=row.duration_months,
+                start_date=row.start_date,
+                expiry_date=row.expiry_date,
+                total_fee=row.total_fee,
+                amount_paid=row.amount_paid,
+                balance=balance,
+                payment_status=payment_status,
+                membership_status=membership_status,
+                days_remaining=days_remaining
+                if membership_status
+                != "Expired"
+                else 0,
+            )
+        )
+
+    return result
 
 
 @router.get(

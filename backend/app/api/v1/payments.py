@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -24,7 +26,6 @@ def create_payment(
     payment_data: PaymentCreate,
     db: Session = Depends(get_db),
 ):
-    # Check member exists
     member = db.get(Member, payment_data.member_id)
 
     if not member:
@@ -33,7 +34,6 @@ def create_payment(
             detail="Member not found.",
         )
 
-    # Check membership if supplied
     membership = None
 
     if payment_data.membership_id is not None:
@@ -48,7 +48,6 @@ def create_payment(
                 detail="Membership not found.",
             )
 
-        # Make sure membership belongs to this member
         if membership.member_id != payment_data.member_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -76,14 +75,23 @@ def create_payment(
     response_model=list[PaymentResponse],
 )
 def get_payments(
+    year: int | None = Query(None),
+    month: int | None = Query(None, ge=1, le=12),
     db: Session = Depends(get_db),
 ):
-    payments = db.scalars(
-        select(Payment)
-        .order_by(Payment.payment_date.desc())
-    ).all()
+    query = select(Payment).order_by(Payment.payment_date.desc())
 
-    return payments
+    if year is not None:
+        query = query.where(
+            func.extract("year", Payment.payment_date) == year
+        )
+
+    if month is not None:
+        query = query.where(
+            func.extract("month", Payment.payment_date) == month
+        )
+
+    return db.scalars(query).all()
 
 
 @router.get(

@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -73,14 +73,18 @@ def create_attendance(
     response_model=list[AttendanceResponse],
 )
 def get_attendance(
+    date: date | None = Query(None),
     db: Session = Depends(get_db),
 ):
-    return db.scalars(
-        select(Attendance).order_by(
-            Attendance.attendance_date.desc(),
-            Attendance.id.desc(),
-        )
-    ).all()
+    query = select(Attendance).order_by(
+        Attendance.attendance_date.desc(),
+        Attendance.id.desc(),
+    )
+
+    if date:
+        query = query.where(Attendance.attendance_date == date)
+
+    return db.scalars(query).all()
 
 
 @router.get(
@@ -122,6 +126,48 @@ def get_member_attendance(
         .where(Attendance.member_id == member_id)
         .order_by(Attendance.attendance_date.desc())
     ).all()
+
+
+@router.get(
+    "/members",
+    response_model=list[dict],
+)
+def get_members_attendance_status(
+    date: date = Query(...),
+    db: Session = Depends(get_db),
+):
+    members = db.scalars(
+        select(Member).where(Member.is_active.is_(True))
+    ).all()
+
+    attendances = db.scalars(
+        select(Attendance).where(
+            Attendance.attendance_date == date
+        )
+    ).all()
+
+    attendance_map = {
+        a.member_id: a for a in attendances
+    }
+
+    result = []
+
+    for member in members:
+        attendance = attendance_map.get(member.id)
+
+        result.append(
+            {
+                "member_id": member.id,
+                "member_name": member.full_name,
+                "member_code": member.member_code,
+                "status": attendance.status if attendance else None,
+                "check_in": attendance.check_in if attendance else None,
+                "check_out": attendance.check_out if attendance else None,
+                "attendance_id": attendance.id if attendance else None,
+            }
+        )
+
+    return result
 
 
 @router.patch(
