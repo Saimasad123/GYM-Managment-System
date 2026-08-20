@@ -17,12 +17,13 @@ from app.api.v1.membership_packages import (
 )
 from app.api.v1.staff import router as staff_router
 from app.api.v1.reminders import router as reminders_router
-from app.db.session import get_db, warmup_connection
+from app.db.session import Base, engine, get_db, warmup_connection
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     warmup_connection()
+    Base.metadata.create_all(bind=engine)
     yield
 
 
